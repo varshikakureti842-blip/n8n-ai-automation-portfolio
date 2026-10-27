@@ -1,0 +1,563 @@
+{
+  "name": "Voice Day-Planner Agent (Gemini + Twilio)",
+  "nodes": [
+    {
+      "id": "ec6df358-1ac5-46d9-ae1e-d46b0ab4f9b4",
+      "name": "Setup Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "content": "## Voice Day-Planner Agent (Gemini + Twilio)\n\n**Setup**\n1. Twilio: you need a Twilio voice number for the From field in 'Start Twilio Call'.\n2. The To number is your own phone (verified in Twilio on a trial account).\n3. Publish the workflow so Twilio can reach the production webhook URL.\n4. Click 'Call Me Now' and your phone rings.\n\nn8n must be reachable from the internet (n8n Cloud, or a tunnel/ngrok for self-hosted).",
+        "color": 4,
+        "width": 520,
+        "height": 300
+      }
+    },
+    {
+      "id": "e1700dae-f719-40f6-b9fd-1aa5ac4202dd",
+      "name": "Call Me Now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        32,
+        464
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "ca5595da-f6b3-4e71-ba69-5fb26f65f113",
+      "name": "Start Twilio Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        480
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/YOUR_TWILIO_ACCOUNT_SID/Calls.json",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "twilioApi",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "To",
+              "value": "+YOUR_VERIFIED_PHONE_NUMBER"
+            },
+            {
+              "name": "From",
+              "value": "+YOUR_TWILIO_VOICE_NUMBER"
+            },
+            {
+              "name": "Url",
+              "value": "https://YOUR-N8N-INSTANCE/webhook/voice-agent"
+            },
+            {
+              "name": "Method",
+              "value": "POST"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "twilioApi": {
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "1a84b9b0-a044-4198-a3e5-65ca292e0082",
+      "name": "Morning Call 8AM Weekdays",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        32,
+        640
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1-5"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c0e7f53f-e196-4b16-a615-2431999ad400",
+      "name": "Voice Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        496,
+        1056
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "voice-agent",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "3dc59c67-3cea-4e59-b64b-a1116ecbe041",
+      "name": "Has Speech?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        1056
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.body.SpeechResult }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "624ce7c9-66e2-4513-a0b4-6beb501b0054",
+      "name": "Voice Planner Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        1024,
+        784
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.body.SpeechResult }}",
+        "options": {
+          "systemMessage": "=You are \"Aria\", a friendly personal day-planner voice assistant on a phone call with your user.\n\nVOICE RULES (very important):\n- You are being read aloud. Never use markdown, bullets, emojis, asterisks or lists with symbols.\n- Keep replies short: 1 to 3 sentences. Ask only ONE question at a time.\n- Say times naturally, like \"three thirty in the afternoon\".\n\nWHAT YOU DO:\n1. Plan the user's day: check today's calendar and tasks with your tools, suggest a realistic order, add focus blocks and breaks, and warn about clashes.\n2. Manage tasks: add, list, and mark tasks done using the Google Tasks tools.\n3. Schedule things: create calendar events when the user confirms the time.\n\nHOW YOU WORK:\n- Current date and time: {{ $now.format('cccc, dd LLLL yyyy, hh:mm a') }}. User timezone: Asia/Kolkata (IST, +05:30). Always use ISO 8601 with +05:30 when calling calendar tools.\n- Before suggesting a plan, call the calendar and tasks tools to see what already exists.\n- Confirm briefly before creating or changing anything, then do it and say what you did.\n- If the user says goodbye, thanks you and is done, or asks to hang up, give a short farewell and put the exact text [END] at the very end of your reply. Otherwise never write [END].\n",
+          "maxIterations": 8
+        }
+      }
+    },
+    {
+      "id": "165842c1-ec42-436a-a764-14f81481abb9",
+      "name": "Gemini Flash",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        912,
+        1024
+      ],
+      "parameters": {
+        "options": {
+          "temperature": 0.4
+        }
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "id": "52ebf46f-6cc5-4d7d-9fa3-3c726255abe4",
+      "name": "Call Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        1072,
+        1024
+      ],
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Voice Webhook').item.json.body.CallSid }}",
+        "contextWindowLength": 12
+      }
+    },
+    {
+      "id": "f1da3886-882a-41c0-a74b-deb08228c363",
+      "name": "Get Calendar Events",
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        1200,
+        1024
+      ],
+      "parameters": {
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "YOUR_CALENDAR_ID@gmail.com",
+          "mode": "id"
+        },
+        "limit": 25,
+        "timeMin": "={{ $fromAI('range_start','Start of range, ISO 8601 with +05:30 offset') }}",
+        "timeMax": "={{ $fromAI('range_end','End of range, ISO 8601 with +05:30 offset') }}",
+        "options": {
+          "orderBy": "startTime"
+        }
+      },
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "id": "38d6e761-2468-4935-a21b-f81b6cf75cae",
+      "name": "Create Calendar Event",
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        1344,
+        1024
+      ],
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "YOUR_CALENDAR_ID@gmail.com",
+          "mode": "id"
+        },
+        "start": "={{ $fromAI('start','Event start, ISO 8601 with +05:30 offset') }}",
+        "end": "={{ $fromAI('end','Event end, ISO 8601 with +05:30 offset') }}",
+        "additionalFields": {
+          "summary": "={{ $fromAI('title','Short event title') }}"
+        }
+      },
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "id": "20a4da1a-f4fa-4881-9555-d702ea4e7974",
+      "name": "List Tasks",
+      "type": "n8n-nodes-base.googleTasksTool",
+      "typeVersion": 1,
+      "position": [
+        1488,
+        1024
+      ],
+      "parameters": {
+        "operation": "getAll",
+        "task": {
+          "__rl": true,
+          "value": "@default",
+          "mode": "id"
+        },
+        "limit": 30,
+        "additionalFields": {
+          "showCompleted": false
+        }
+      },
+      "credentials": {
+        "googleTasksOAuth2Api": {
+          "name": "Google Tasks account"
+        }
+      }
+    },
+    {
+      "id": "dd36f6d6-6832-41d6-9e32-5efb47711726",
+      "name": "Add Task",
+      "type": "n8n-nodes-base.googleTasksTool",
+      "typeVersion": 1,
+      "position": [
+        1632,
+        1024
+      ],
+      "parameters": {
+        "task": {
+          "__rl": true,
+          "value": "@default",
+          "mode": "id"
+        },
+        "title": "={{ $fromAI('title','Short task title') }}",
+        "additionalFields": {
+          "dueDate": "={{ $fromAI('due','Optional due date ISO 8601','string') }}",
+          "notes": "={{ $fromAI('notes','Optional notes','string') }}"
+        }
+      },
+      "credentials": {
+        "googleTasksOAuth2Api": {
+          "name": "Google Tasks account"
+        }
+      }
+    },
+    {
+      "id": "2667dcd8-a03a-4557-94d4-fe92fb15cf00",
+      "name": "Complete Task",
+      "type": "n8n-nodes-base.googleTasksTool",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        1024
+      ],
+      "parameters": {
+        "operation": "update",
+        "task": {
+          "__rl": true,
+          "value": "@default",
+          "mode": "id"
+        },
+        "taskId": "={{ $fromAI('task_id','ID of the task from List Tasks') }}",
+        "updateFields": {
+          "status": "completed"
+        }
+      },
+      "credentials": {
+        "googleTasksOAuth2Api": {
+          "name": "Google Tasks account"
+        }
+      }
+    },
+    {
+      "id": "0e39fc72-a8a3-45d0-9403-5819bc86afc2",
+      "name": "Build TwiML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        1056
+      ],
+      "parameters": {
+        "jsCode": "const wh = $('Voice Webhook').first().json;\nlet reply = String($json.output || $json.reply || \"Sorry, I had a problem. Could you say that again?\");\nconst end = reply.includes('[END]');\nreply = reply.replace(/\\[END\\]/g, '').replace(/[*_#`]/g, '').trim();\n\nconst esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\n\n// Change these two for another language, e.g. language \"te-IN\" and voice \"Google.te-IN-Standard-A\"\nconst VOICE = 'Google.en-IN-Neural2-A';\nconst LANG = 'en-IN';\n\nlet twiml;\nif (end) {\n  twiml = `<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response><Say voice=\"${VOICE}\" language=\"${LANG}\">${esc(reply)}</Say><Hangup/></Response>`;\n} else {\n  twiml = `<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response>` +\n    `<Gather input=\"speech\" action=\"${esc(wh.webhookUrl)}\" method=\"POST\" language=\"${LANG}\" speechTimeout=\"auto\" speechModel=\"experimental_conversations\" actionOnEmptyResult=\"true\">` +\n    `<Say voice=\"${VOICE}\" language=\"${LANG}\">${esc(reply)}</Say></Gather>` +\n    `<Say voice=\"${VOICE}\" language=\"${LANG}\">I did not hear anything. Call me again whenever you want to plan your day. Goodbye!</Say><Hangup/></Response>`;\n}\nreturn [{ json: { twiml } }];"
+      }
+    },
+    {
+      "id": "1f5ef02c-38e2-4da7-9226-226035a038b2",
+      "name": "Respond to Twilio",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2144,
+        1056
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.twiml }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/xml"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "bbe562c7-e7df-49c8-aa97-a2911517f4fa",
+      "name": "Greeting",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1328,
+        1200
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "g1",
+              "name": "reply",
+              "type": "string",
+              "value": "Hi! I'm Aria, your day planner. Do you want to plan your day, add a task, or check your schedule?"
+            }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Call Me Now": {
+      "main": [
+        [
+          {
+            "node": "Start Twilio Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Morning Call 8AM Weekdays": {
+      "main": [
+        [
+          {
+            "node": "Start Twilio Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Voice Webhook": {
+      "main": [
+        [
+          {
+            "node": "Has Speech?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Speech?": {
+      "main": [
+        [
+          {
+            "node": "Voice Planner Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Greeting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Voice Planner Agent": {
+      "main": [
+        [
+          {
+            "node": "Build TwiML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Flash": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Voice Planner Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Voice Planner Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Calendar Events": {
+      "ai_tool": [
+        [
+          {
+            "node": "Voice Planner Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Calendar Event": {
+      "ai_tool": [
+        [
+          {
+            "node": "Voice Planner Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Tasks": {
+      "ai_tool": [
+        [
+          {
+            "node": "Voice Planner Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Task": {
+      "ai_tool": [
+        [
+          {
+            "node": "Voice Planner Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete Task": {
+      "ai_tool": [
+        [
+          {
+            "node": "Voice Planner Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build TwiML": {
+      "main": [
+        [
+          {
+            "node": "Respond to Twilio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Greeting": {
+      "main": [
+        [
+          {
+            "node": "Build TwiML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

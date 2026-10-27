@@ -1,0 +1,267 @@
+{
+  "name": "Simple RAG Demo",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "e0f855b3-e9fa-46e5-880e-edefdf6656d4",
+      "name": "Load Knowledge Base",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\"text\": \"Acme Corp offers a 30-day money-back guarantee on all purchases. Refunds are processed within 5 business days of approval. Digital products are refundable only if not downloaded. Acme Corp support is available Monday to Friday, 9am to 6pm CET, via email at support@acme.example and live chat. Premium customers get 24/7 phone support. Standard shipping takes 3-5 business days; express shipping takes 1-2 business days.\"}",
+        "options": {}
+      },
+      "id": "42a01c75-6a21-434c-b9da-5a6aad3969b7",
+      "name": "Sample Documents",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        224,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "memoryKey": {
+          "__rl": true,
+          "mode": "id",
+          "value": "rag_demo"
+        },
+        "clearStore": true
+      },
+      "id": "d84c23c9-2fd9-4ae9-ae1c-587462522d13",
+      "name": "Store Documents",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreInMemory",
+      "typeVersion": 1.3,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "52921b1b-0866-43cc-aa67-ef267f9114c8",
+      "name": "Embeddings (Insert)",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        464,
+        224
+      ],
+      "credentials": {
+        "openAiApi": {
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $json.text }}",
+        "options": {}
+      },
+      "id": "476afd57-4f21-4bbd-8ffe-49183596ccbf",
+      "name": "Document Loader",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        592,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "d3da7574-d06e-430e-b232-b716a5845fbb",
+      "name": "Ask a Question",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        0,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "You answer questions about Acme Corp. Always use the search_knowledge_base tool first and answer only from its results. If the answer is not found, say you do not know."
+        }
+      },
+      "id": "22e38142-2207-4b93-b92a-975003e1d8a6",
+      "name": "RAG Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        256,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "4b436453-999c-49c0-ba3f-701ee53104a2",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        224,
+        864
+      ],
+      "credentials": {
+        "openAiApi": {
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Search the Acme Corp knowledge base for refund, support and shipping information.",
+        "memoryKey": {
+          "__rl": true,
+          "mode": "id",
+          "value": "rag_demo"
+        },
+        "topK": 3
+      },
+      "id": "cba04644-1a47-4bae-a00e-2f62e1e7694c",
+      "name": "search_knowledge_base",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreInMemory",
+      "typeVersion": 1.3,
+      "position": [
+        608,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "37461b2b-62e8-4c4e-b268-8f6689396161",
+      "name": "Embeddings (Query)",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        432,
+        1072
+      ],
+      "credentials": {
+        "openAiApi": {
+          "name": "OpenAI account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Load Knowledge Base": {
+      "main": [
+        [
+          {
+            "node": "Sample Documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample Documents": {
+      "main": [
+        [
+          {
+            "node": "Store Documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings (Insert)": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Store Documents",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Document Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "Store Documents",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask a Question": {
+      "main": [
+        [
+          {
+            "node": "RAG Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "RAG Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "search_knowledge_base": {
+      "ai_tool": [
+        [
+          {
+            "node": "RAG Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings (Query)": {
+      "ai_embedding": [
+        [
+          {
+            "node": "search_knowledge_base",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
